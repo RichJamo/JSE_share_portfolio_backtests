@@ -34,6 +34,7 @@ inputs_not_to_shift = ['price_monthly','volume_monthly','market_val']
 inputs_to_shift=[item for item in inputs if item not in inputs_not_to_shift]
 
 ############ RUN CODE
+# create a data object 'd' using backtest.py
 d = bt.Data(path, inputs, inputs_to_shift, months_delay_data=3, start=0, delist_value=1)
 
 #data_present = d.accruals()*d.pfd()*d.pman()*d.market_cap()*d.mom()*d.mvi_weight()*d.value()*d.fip()
@@ -44,6 +45,7 @@ init_pos1 = pd.DataFrame(1, index=d.basic_data['price_monthly'].index, columns=d
 non_fin_sectors = list(pd.read_csv(os.path.join(path,'other data','non-fins.csv'))) #list(sectors.index[sectors==0])
 non_fin_sectors.remove('WES-JSE') # there's a woopsie in the price data for this stock, so I've just excluded it for now...
 init_pos_non_fins= init_pos1[non_fin_sectors]
+
 ############## INIT POSITION - JUST FIN STOCKS
 fin_sectors = list(pd.read_csv(os.path.join(path,'other data','financials.csv'))) #list(sectors.index[sectors==0])
 fin_sectors.remove('STP-JSE') # there's a woopsie in the price data for this stock, so I've just excluded it for now...
@@ -143,7 +145,7 @@ def QM_parts():
     bt.plot_CAGR(ret, metrics, 1)
     bt.plot_CAGR(ret, metrics, 5)
 
-    
+# this runs all of the component parts of the QV strategies as separate sub-strategies    
 def QV_parts():
     ret={}  
     mc=bt.Mkt_cap_scr(threshold=100)
@@ -222,6 +224,7 @@ def QV_parts():
     bt.plot_CAGR(ret, metrics, 1)
     bt.plot_CAGR(ret, metrics, 5)
 
+# this runs all of the component parts of the QV strategies as separate sub-strategies (for financial companies) 
 def QV_fin_parts():
     ret={}  
     mc=bt.Mkt_cap_scr(threshold=0)
@@ -300,6 +303,7 @@ def QV_fin_parts():
     bt.plot_CAGR(ret, metrics, 1)
     bt.plot_CAGR(ret, metrics, 5)
 
+# this runs a random screen strategy, as a baseline comparison (as opposed to just comparing to holding the whole universe)
 def random_test():
     ret={}  
     mc=bt.Mkt_cap_scr(threshold=0)
@@ -515,6 +519,7 @@ for i in range(1000,len(test)):
         except:
             pass
 
+# output the results
 daily_returns = bt.calc_ret(test,d.daily_price)
 import matplotlib.pyplot as plt
 plt.plot(100*np.cumprod(1.+daily_returns))
