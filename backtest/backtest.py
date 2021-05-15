@@ -12,18 +12,21 @@ import os.path
 from scipy.stats import norm
 
 ############ FUNCTIONS
+# calculates maxi mum drawdown of a backtest
 def max_dd(ser):
     max2here = pd.expanding_max(ser)
     dd2here = (ser - max2here)/max2here
     dd2here[dd2here == -np.inf] = 0
     return dd2here.min()
 
+# cleans data by removing a nan in a row with the mean of that row
 def data_clean(df): 
     df = df.T.fillna(df.mean(axis=1)).T # replace nans in rows with the mean of that row - only if it isn't a row of nan's
     df = df.interpolate() # interpolate where there are values before and after
     #df = df.fillna(method='bfill') # OPTIONAL: fill backwards where there are no values going back...
     return df
         
+# reads in data from a .csv file, with some quite specific changes to fix the idiosyncracies of the dataset I was using
 def read_in_data(filename):
     df = pd.read_csv(filename)
     try:
@@ -54,6 +57,7 @@ def read_in_data(filename):
         pass
     return df
 
+# screens out the bottom 10% of the dataset - on what basis?
 def screen(init_pos, data_in, scr_perc=0.10, ascending=True):
     tmp_data=data_in*init_pos
     tmp_data=tmp_data.replace(0,np.nan)
@@ -68,7 +72,6 @@ def screen(init_pos, data_in, scr_perc=0.10, ascending=True):
     return screen
 
 
-
 #def random_screen(init_pos, scr_perc=0.10):
 #    random_df = pd.DataFrame(np.random.rand(init_pos.shape[0],init_pos.shape[1]), index=init_pos.index, columns = init_pos.columns) #np.random.randint(0,init_pos.shape[1],size=init_pos.shape), index=init_pos.index, columns = init_pos.columns)    
 #    tmp_data=random_df*init_pos
@@ -81,7 +84,8 @@ def screen(init_pos, data_in, scr_perc=0.10, ascending=True):
 #    tmp_screen[tmp_screen>0]=1
 #    tmp_screen = tmp_screen.fillna(0)
 #    return tmp_screen
-    
+
+# screens on a true/false basis?
 def bool_screen(init_pos, data_in, threshold): 
     tmp_data=data_in*1    
     tmp_data[tmp_data<threshold]=0
@@ -89,11 +93,13 @@ def bool_screen(init_pos, data_in, threshold):
     tmp_screen = tmp_data.fillna(0)
     positions = tmp_screen*init_pos
     return positions
-    
+
+# attributes weights somehow?
 def weight(positions, weighting_data):
     positions = ((positions*weighting_data).T/(positions*weighting_data).sum(axis=1)).T
     return positions
 
+# limits the size of any single position in the portfolio from going above an upper limit or below an lower limit
 def limit_pos_size(weights, lower_limit=0.02, upper_limit = 0.2):     
     weights = weights.clip(upper=upper_limit)
     row_sum = weights.sum(axis=1)
@@ -109,7 +115,8 @@ def limit_pos_size(weights, lower_limit=0.02, upper_limit = 0.2):
         new_weights = new_weights.where(new_weights>lower_limit,0)
     
     return new_weights   
-    
+
+# calculates the return of the portfolio
 def calc_ret(positions, prices, cost=0): #reinsert cost here!!
     pnl = positions.shift(1)*(prices-prices.shift(1))/prices.shift(1) # calculate pnl as position yesterday x price change since yesterday
     pnl=pnl.fillna(0)
@@ -121,6 +128,7 @@ def calc_ret(positions, prices, cost=0): #reinsert cost here!!
     ret=ret.fillna(0)
     return ret
 
+# not sure what this is?
 def trend_filter(j203_price, ret, risk_free): # all three of these are series
     tmp=pd.concat([j203_price,pd.rolling_mean(j203_price, 12)],axis=1) # create a temp dataframe with alsi price & 12 mth MA
     tmp=tmp.reindex(index=ret.index,method='nearest')
@@ -132,6 +140,7 @@ def trend_filter(j203_price, ret, risk_free): # all three of these are series
     tmp['returns']=tmp['diff']*risk_free # in months where there's a signal, we take the risk-free rate
     ret[tmp['diff']==1]=tmp['returns'] # we insert the risk-free return into the ret dataframe
 
+    # plot the returns out output the plot
 def plot_returns(ret, metrics):
     fig, ax1 = plt.subplots()
     colors = ['red','blue','green','magenta','pink','orange', 'purple','yellow','black','cyan','turquoise','white']
@@ -147,7 +156,8 @@ def plot_returns(ret, metrics):
     #plt.ylabel('no of stocks')
     plt.title('Value of $100 invested (log scale)')   
     plt.show()
-    
+
+# plot the compound annual growth rate of the portfolio    
 def plot_CAGR(ret, metrics, num_years):
     rolling_CAGR={}
     colors = ['red','blue','green','magenta','pink','orange', 'purple','yellow','black','cyan','turquoise','white']
@@ -158,7 +168,8 @@ def plot_CAGR(ret, metrics, num_years):
     plt.legend(loc=2)
     plt.title('{} yr rolling CAGR'.format(num_years)) 
     plt.show()
-    
+
+# tabulate the results and output the table
 def tabulate_results(ret, metrics, frequency = 12.0, risk_free = 0.07):  
     MAR=(1+risk_free)**(1.0/frequency)-1 # an annual rate of 7% converted to a monthly rate
     table_list = [[metrics[i], 
@@ -174,7 +185,8 @@ def tabulate_results(ret, metrics, frequency = 12.0, risk_free = 0.07):
                     for i in range(len(metrics))]
     print tabulate(table_list, headers=['CAGR','Std Dev', 'Sharpe','Sortino','GPR','Max Drawdown','Best mth', 'Worst mth','Win mths']) #,floatfmt=".2%"
 
-def delisting(prices, delist_value):
+# NB - need to assume a price at which we would have exited delisted stocks
+def delisting(prices, delist_value): # delist value here can be set as a percentage of final price
     prices = prices.replace(0,np.nan)
     columns= prices.columns
     for i in range(len(columns)):
@@ -185,7 +197,8 @@ def delisting(prices, delist_value):
             pass
     return prices
 ############## Classes ####################
-        
+
+# a general data object
 class Data(object):
     
     def __init__(self, path, inputs, inputs_to_shift, months_delay_data=3, start=0, delist_value=0.5):        
@@ -235,6 +248,7 @@ class Data(object):
         self.risk_free=self.risk_free/100
         self.risk_free = self.risk_free.apply(lambda x: (x+1)**(1.0/12)-1)
 
+# a general strategy object
 class Strategy(object):
     
     def liquidity(self, data):
@@ -278,7 +292,8 @@ class Strategy(object):
     def latest(self, date='2016-11-01'):
         latest = self.final_positions.ix[date][self.final_positions.ix[date]>0]
         return latest  
-        
+
+# Quantitative value screen - which has many components, many of which are below
 class QV(Strategy):
     
     def __init__(self, threshold=1000, scr2_perc=0.95, scr3_perc = 0.15, scr4_perc = 0.6, weighting='mkt_cap', upper_limit=0.2): #, trend_filter=False, threshold = 0
@@ -316,7 +331,8 @@ class QV(Strategy):
         self.positions5 = mw_object.run(self.positions4,data) #weight(self.positions4, self.set_weights(data)[self.weighting])
 
         self.final_positions = limit_pos_size(self.positions5, self.upper_limit) 
-        
+
+# accruals calculations
 class Accruals(Strategy):
     def __init__(self, scr_perc = 0.05):
         self.scr_perc=scr_perc 
@@ -345,7 +361,8 @@ class Accruals(Strategy):
         #snoa = data_clean(snoa)
         p_snoa = (snoa.rank(axis=1, ascending = True).T/snoa.count(axis=1)).T
         return p_snoa 
- 
+
+# accruals calculation for financial companies
 class Accruals_fin(Accruals):
         
     def p_snoa(self, data):
@@ -365,7 +382,8 @@ class Accruals_fin(Accruals):
         #snoa = data_clean(snoa)
         p_snoa = (snoa.rank(axis=1, ascending = True).T/snoa.count(axis=1)).T
         return p_snoa
-        
+
+# ordinary Pman screen
 class Pman(Strategy):
     def __init__(self, scr_perc = 0.05):
         self.scr_perc=scr_perc 
@@ -398,6 +416,7 @@ class Pman(Strategy):
         self.final_positions = positions*init_pos
         return self.final_positions
 
+# Pman screen for financial companies
 class Pman_fin(Pman):
     def __init__(self, banks, insurers, scr_perc = 0.05):
         self.scr_perc=scr_perc 
@@ -437,7 +456,8 @@ class Pman_fin(Pman):
         positions = positions.replace(np.nan,1)
         self.final_positions = positions*init_pos
         return self.final_positions
-        
+
+# PFD screen
 class Pfd(Strategy): 
     def __init__(self, scr_perc = 0.05):
         self.scr_perc=scr_perc 
@@ -471,6 +491,7 @@ class Pfd(Strategy):
         self.final_positions = positions*init_pos
         return self.final_positions
 
+# PFD screen for financial companies
 class Pfd_fin(Pfd): 
     def __init__(self, scr_perc = 0.05):
         self.scr_perc=scr_perc 
@@ -507,7 +528,8 @@ class Pfd_fin(Pfd):
         positions = positions.replace(np.nan,1)
         self.final_positions = positions*init_pos
         return self.final_positions
-        
+
+# Forensic screen
 class Forensic(Strategy):
     def __init__(self, scr_perc = 0.05):
         self.scr_perc=scr_perc 
@@ -519,6 +541,7 @@ class Forensic(Strategy):
         self.final_positions = accruals_obj.run(init_pos, data) * pfd_obj.run(init_pos, data) * pman_obj.run(init_pos, data)
         return self.final_positions
 
+# Forensic screen - for financial companies - inherits from main forensic screen
 class Forensic_fin(Forensic):
     def __init__(self, banks, insurers, scr_perc = 0.05):
         self.scr_perc=scr_perc 
@@ -531,7 +554,8 @@ class Forensic_fin(Forensic):
         pman_obj = Pman_fin(banks = self.banks, insurers = self.insurers, scr_perc = self.scr_perc)     
         self.final_positions = accruals_obj.run(init_pos, data) * pfd_obj.run(init_pos, data) * pman_obj.run(init_pos, data)
         return self.final_positions
-        
+
+# Value screen
 class Value(Strategy):
     def __init__(self, scr_perc = 0.15):
         self.scr_perc=scr_perc 
@@ -545,6 +569,8 @@ class Value(Strategy):
 #        value = data.basic_data['price_monthly']/data.basic_data['bps'] # how much it costs / how much it makes - so a a high score = expensive, a low score = cheap
 #        #value = data_clean(value)
 #        return value
+
+# Value screen - for financial companies
 class Value_fin(Value):
     def __init__(self, scr_perc = 0.15):
         self.scr_perc=scr_perc 
@@ -554,7 +580,8 @@ class Value_fin(Value):
         value = value.where(np.isfinite(value), data.basic_data['entrpr_val']/data.basic_data['oper_inc']) # should be oper_inc?
         self.final_positions = screen(init_pos, value, scr_perc = self.scr_perc, ascending=True)
         return self.final_positions
-        
+
+# Quality screen
 class Quality(Strategy):
     def __init__(self, scr_perc = 0.5):
         self.scr_perc=scr_perc 
@@ -578,7 +605,8 @@ class Quality_fin(Quality):
         quality = (fs_object.metric(data)+pfp_object.metric(data))/2.0
         self.final_positions = screen(init_pos, quality, scr_perc = self.scr_perc, ascending=False)
         return self.final_positions
-        
+
+# PFP
 class Pfp(Strategy):
     def __init__(self, scr_perc = 0.5):
         self.scr_perc=scr_perc 
@@ -641,7 +669,8 @@ class Pfp_fin(Pfp):
         pfp = pfp.reindex(index=data.index, method='nearest')
         #pfp = data_clean(pfp)
         return pfp
-        
+
+# Forensic screen
 class Fs(Strategy):
     def __init__(self, scr_perc = 0.5):
         self.scr_perc=scr_perc 
@@ -668,6 +697,7 @@ class Fs(Strategy):
         p_fs = (p_fs.rank(axis=1, ascending = True).T/p_fs.count(axis=1)).T #
         return p_fs
 
+# Forensic screen - for financial companies
 class Fs_fin(Fs):
     def __init__(self, banks, insurers, scr_perc = 0.5):
         self.scr_perc=scr_perc 
@@ -699,7 +729,8 @@ class Fs_fin(Fs):
         
         p_fs = (roa+fcfta+accrual+chg_lever+chg_roa+chg_liquid+chg_neqiss+chg_fcfta+chg_margin+chg_turn)/8.0 #
         return p_fs
-        
+
+# Quantitative value strategy - on financial stocks
 class QV_fin(QV):
     
     def __init__(self, banks, insurers, threshold=1000, scr2_perc=0.95, scr3_perc = 0.15, scr4_perc = 0.6, upper_limit=0.2):
@@ -732,7 +763,7 @@ class QV_fin(QV):
 
         self.final_positions = limit_pos_size(self.positions5, self.upper_limit)
         
-        
+# Quantitative momentum strategy        
 class QM(Strategy):
     
     def __init__(self, threshold=1000, scr2_perc = 0.15, scr3_perc = 0.6, upper_limit=0.2):
@@ -757,6 +788,7 @@ class QM(Strategy):
         
         return self.final_positions
 
+# Momentum strategy
 class Mom(Strategy):
     
     def __init__(self, scr_perc = 0.15):
@@ -767,7 +799,8 @@ class Mom(Strategy):
         #mom = data_clean(mom)      
         self.final_positions = screen(init_pos, mom, scr_perc = self.scr_perc, ascending=False)
         return self.final_positions
-     
+
+# FIP
 class Fip(Strategy):
     
     def __init__(self, scr_perc = 0.6):
@@ -778,7 +811,8 @@ class Fip(Strategy):
         fip = fip.reindex(index=data.index, method='ffill')   
         self.final_positions = screen(init_pos, fip, scr_perc = self.scr_perc, ascending=True)      
         return self.final_positions 
-        
+ 
+# Ken Long strategy
 class Kl_str(Strategy):
     
     def __init__(self, scr_perc = 0.15):
@@ -790,7 +824,8 @@ class Kl_str(Strategy):
         kl_str= kl_str.reindex(index=data.index, method='nearest')      
         self.final_positions = screen(init_pos, kl_str, scr_perc = self.scr_perc, ascending=False)
         return self.final_positions
-        
+
+# Ken Long conservative strategy
 class Kl_con(Strategy):
   
     def __init__(self, scr_perc = 0.6):
@@ -804,7 +839,8 @@ class Kl_con(Strategy):
         kl_con= kl_con.reindex(index=data.index, method='nearest')     
         self.final_positions = screen(init_pos, kl_con, scr_perc = self.scr_perc, ascending=False)
         return self.final_positions
-        
+
+# Ken Long quality strategy
 class Kl_qual(Strategy):
         
     def __init__(self, scr_perc = 0.6):
@@ -818,6 +854,7 @@ class Kl_qual(Strategy):
         self.final_positions = screen(init_pos, kl_qual, scr_perc = self.scr_perc, ascending=False)
         return self.final_positions
 
+# screen out companies with a market cap lower than the threshold (in millions)   
 class Mkt_cap_scr(Strategy):
     
     def __init__(self, threshold=1000):
@@ -827,12 +864,14 @@ class Mkt_cap_scr(Strategy):
         self.final_positions = bool_screen(init_pos, data.basic_data['market_val'], self.threshold) # mkt cap of R2bn or more threshold = 2000
         return self.final_positions       
 
+# weight the stocks by market cap within the strategy
 class Mkt_cap_weights(Strategy):
         
     def run(self, init_pos, data):     
         self.final_positions = weight(init_pos, self.mkt_weight(data))
         return self.final_positions 
 
+# weight stocks by inverse volatility
 class Mvi_weights(Strategy):
         
     def run(self, init_pos, data, mvi_window_len=220):     
@@ -843,7 +882,8 @@ class Mvi_weights(Strategy):
         mvi_weight= mvi_weight.reindex(index=data.index, method='nearest')        
         self.final_positions = weight(init_pos, mvi_weight)
         return self.final_positions
-        
+
+# BAH
 class BAH(Strategy):
     def __init__(self):
         pass
@@ -854,6 +894,7 @@ class BAH(Strategy):
         
         return self.final_positions
 
+# a random screen / strategy, for comparative purposes
 class Random_screen(Strategy):
         
     def __init__(self, scr_perc = 0.15):
@@ -867,7 +908,7 @@ def plot_print(ret, label):
     cum_ret = np.cumsum(ret)
     plt.plot(cum_ret, label=label)
 
-
+# channeling strategy
 class Channeling(Strategy):
         
     def __init__(self, scr_perc = 0.15):
