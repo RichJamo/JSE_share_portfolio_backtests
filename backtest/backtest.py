@@ -12,7 +12,7 @@ import os.path
 from scipy.stats import norm
 
 ############ FUNCTIONS
-# calculates maxi mum drawdown of a backtest
+# calculates maximum drawdown of a backtest
 def max_dd(ser):
     max2here = pd.expanding_max(ser)
     dd2here = (ser - max2here)/max2here
@@ -85,7 +85,7 @@ def screen(init_pos, data_in, scr_perc=0.10, ascending=True):
 #    tmp_screen = tmp_screen.fillna(0)
 #    return tmp_screen
 
-# screens on a true/false basis?
+# this boolean screen just returns a 1 or 0 in each position indicating whether that ticker is in/out on that day
 def bool_screen(init_pos, data_in, threshold): 
     tmp_data=data_in*1    
     tmp_data[tmp_data<threshold]=0
@@ -94,7 +94,7 @@ def bool_screen(init_pos, data_in, threshold):
     positions = tmp_screen*init_pos
     return positions
 
-# attributes weights somehow?
+# this screen attributes a weight to each position, according to some kind of weighting data (market cap or inverse volatility)
 def weight(positions, weighting_data):
     positions = ((positions*weighting_data).T/(positions*weighting_data).sum(axis=1)).T
     return positions
@@ -140,7 +140,7 @@ def trend_filter(j203_price, ret, risk_free): # all three of these are series
     tmp['returns']=tmp['diff']*risk_free # in months where there's a signal, we take the risk-free rate
     ret[tmp['diff']==1]=tmp['returns'] # we insert the risk-free return into the ret dataframe
 
-    # plot the returns out output the plot
+# plot the returns out output the plot
 def plot_returns(ret, metrics):
     fig, ax1 = plt.subplots()
     colors = ['red','blue','green','magenta','pink','orange', 'purple','yellow','black','cyan','turquoise','white']
@@ -670,7 +670,7 @@ class Pfp_fin(Pfp):
         #pfp = data_clean(pfp)
         return pfp
 
-# Forensic screen
+# F-score
 class Fs(Strategy):
     def __init__(self, scr_perc = 0.5):
         self.scr_perc=scr_perc 
@@ -697,7 +697,7 @@ class Fs(Strategy):
         p_fs = (p_fs.rank(axis=1, ascending = True).T/p_fs.count(axis=1)).T #
         return p_fs
 
-# Forensic screen - for financial companies
+# F-score - for financial companies
 class Fs_fin(Fs):
     def __init__(self, banks, insurers, scr_perc = 0.5):
         self.scr_perc=scr_perc 
@@ -775,7 +775,7 @@ class QM(Strategy):
     def backtest(self, init_pos, data):     
         mc= Mkt_cap_scr(threshold=self.threshold)
         self.positions1 = mc.run(init_pos, data) #bool_screen(init_pos, self.market_cap(data), self.threshold) # mkt cap of R2bn or more threshold = 2000
-        
+        # momentum
         m=Mom(scr_perc = self.scr2_perc)
         self.positions2 = m.run(self.positions1, data)
         
