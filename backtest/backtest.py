@@ -14,7 +14,7 @@ from scipy.stats import norm
 ############ FUNCTIONS
 # calculates maximum drawdown of a backtest
 def max_dd(ser):
-    max2here = pd.expanding_max(ser)
+    max2here = ser.cummax()
     dd2here = (ser - max2here)/max2here
     dd2here[dd2here == -np.inf] = 0
     return dd2here.min()
@@ -61,7 +61,7 @@ def read_in_data(filename):
 def screen(init_pos, data_in, scr_perc=0.10, ascending=True):
     tmp_data=data_in*init_pos
     tmp_data=tmp_data.replace(0,np.nan)
-    tmp_data=tmp_data.as_matrix()    
+    tmp_data=tmp_data.values  
     if ascending == True:   
         perc=np.nanpercentile(tmp_data,100*scr_perc,axis=1, keepdims=True)    
         screen=np.where(tmp_data<perc,1,0)
@@ -103,13 +103,13 @@ def weight(positions, weighting_data):
 def limit_pos_size(weights, lower_limit=0.02, upper_limit = 0.2):     
     weights = weights.clip(upper=upper_limit)
     row_sum = weights.sum(axis=1)
-    row_sum_2 = weights[weights<>upper_limit].sum(axis=1)
+    row_sum_2 = weights[weights!=upper_limit].sum(axis=1)
     new_weights = (weights.T*(1+(1-row_sum)/(row_sum_2))).T
     new_weights = new_weights.clip(upper=upper_limit)
     for j in range(5):
         for i in range(5): #while new_weights.sum(axis=1)<1:
             row_sum = new_weights.sum(axis=1)
-            row_sum_2 = new_weights[new_weights<>upper_limit].sum(axis=1)
+            row_sum_2 = new_weights[new_weights!=upper_limit].sum(axis=1)
             new_weights = (new_weights.T*(1+(1-row_sum)/(row_sum_2))).T
             new_weights = new_weights.clip(upper=upper_limit)
         new_weights = new_weights.where(new_weights>lower_limit,0)
@@ -162,7 +162,7 @@ def plot_CAGR(ret, metrics, num_years):
     rolling_CAGR={}
     colors = ['red','blue','green','magenta','pink','orange', 'purple','yellow','black','cyan','turquoise','white']
     for i in range(len(metrics)):
-        rolling_CAGR[metrics[i]] = pd.rolling_apply(ret[metrics[i]], num_years*12, lambda x: (np.prod(1+x)**(12.0/len(x))-1))
+        rolling_CAGR[metrics[i]] = ret[metrics[i]].rolling(num_years*12).apply(lambda x: (np.prod(1+x)**(12.0/len(x))-1))
         plt.plot(rolling_CAGR[metrics[i]], color=colors[i], lw=1, label = metrics[i])
     plt.grid(True)
     plt.legend(loc=2)
@@ -183,7 +183,7 @@ def tabulate_results(ret, metrics, frequency = 12.0, risk_free = 0.07):
                     "{:.2%}".format(min(ret[metrics[i]])),
                     "{:.2%}".format(float(ret[metrics[i]][ret[metrics[i]]>0].count())/ret[metrics[i]].count())] # max drawdown - need to make it a percentage
                     for i in range(len(metrics))]
-    print tabulate(table_list, headers=['CAGR','Std Dev', 'Sharpe','Sortino','GPR','Max Drawdown','Best mth', 'Worst mth','Win mths']) #,floatfmt=".2%"
+    print (tabulate(table_list, headers=['CAGR','Std Dev', 'Sharpe','Sortino','GPR','Max Drawdown','Best mth', 'Worst mth','Win mths'])) #,floatfmt=".2%"
 
 # NB - need to assume a price at which we would have exited delisted stocks
 def delisting(prices, delist_value): # delist value here can be set as a percentage of final price
@@ -286,11 +286,13 @@ class Strategy(object):
         return weighting
         
     def calc_ret(self, price_data, start_date='2000-01-30'):
-        ret = calc_ret(self.final_positions.ix[start_date:], price_data.ix[start_date:])
+        #ret = calc_ret(self.final_positions.ix[start_date:], price_data.ix[start_date:]) - .ix has been deprecated
+        ret = calc_ret(self.final_positions.loc[start_date:], price_data.loc[start_date:])
         return ret
         
     def latest(self, date='2016-11-01'):
-        latest = self.final_positions.ix[date][self.final_positions.ix[date]>0]
+        #latest = self.final_positions.ix[date][self.final_positions.ix[date]>0] - .ix has been deprecated
+        latest = self.final_positions.loc[date][self.final_positions.loc[date]>0]
         return latest  
 
 # Quantitative value screen - which has many components, many of which are below
@@ -471,7 +473,8 @@ class Pfd(Strategy):
         exret = np.add(np.log(1+data.basic_data['price_monthly'] .pct_change(periods=3)),-np.log(1+data.j203_price.pct_change(periods=3))) #will have to get alsi?
         exret_avg = (0.5333*exret)+(0.2666*exret.shift(3))+(exret.shift(6)*0.1333)+(exret.shift(9)*0.0666)
         #exret_avg = data_clean(exret_avg)
-        sigma = (np.sqrt(252)*pd.rolling_std(data.daily_price.pct_change(), window=60)).reindex(index=data.index,method='nearest') # is this the right way to annualise??
+        #sigma = (np.sqrt(252)*pd.rolling_std(data.daily_price.pct_change(), window=60)).reindex(index=data.index,method='nearest') # is this the right way to annualise??
+        sigma = (np.sqrt(252)*data.daily_price.pct_change().rolling(60)).reindex(index=data.index,method='nearest') # is this the right way to annualise??
         #sigma = data_clean(sigma)
         rsize = np.log((data.basic_data['market_val'].T/data.basic_data['market_val'] .sum(axis=1)).T) # log base 10 or natural log???
         #rsize= data_clean(rsize)        
@@ -807,7 +810,8 @@ class Fip(Strategy):
         self.scr_perc = scr_perc # fip - quality of momentum  
         
     def run(self, init_pos, data):     
-        fip = np.sign(data.basic_data['price_monthly'].pct_change(11).shift(1))*pd.rolling_apply( data.daily_price.pct_change(), 252, lambda x: (len(np.where(x<0)[0])-len(np.where(x>0)[0]))/252.0)
+        #fip = np.sign(data.basic_data['price_monthly'].pct_change(11).shift(1))*pd.rolling_apply( data.daily_price.pct_change(), 252, lambda x: (len(np.where(x<0)[0])-len(np.where(x>0)[0]))/252.0)
+        fip = np.sign(data.basic_data['price_monthly'].pct_change(11).shift(1))*data.daily_price.pct_change().rolling(252).apply(lambda x: (len(np.where(x<0)[0])-len(np.where(x>0)[0]))/252.0)
         fip = fip.reindex(index=data.index, method='ffill')   
         self.final_positions = screen(init_pos, fip, scr_perc = self.scr_perc, ascending=True)      
         return self.final_positions 
@@ -875,7 +879,8 @@ class Mkt_cap_weights(Strategy):
 class Mvi_weights(Strategy):
         
     def run(self, init_pos, data, mvi_window_len=220):     
-        stdev = pd.rolling_std(data.daily_price, window=mvi_window_len)
+        #stdev = pd.rolling_std(data.daily_price, window=mvi_window_len) - rolling_std has been deprecated in pandas
+        stdev = data.daily_price.rolling(mvi_window_len).std()
         mvi_weight = 1/stdev #daily_price/stdev - this is the volatility indicator
         #test=daily_price.diff()
         #downside_dev = pd.rolling_apply(test, 110, lambda x: np.sqrt((x[x<0]-x.mean())**2).sum()/len(x[x<0]) )
