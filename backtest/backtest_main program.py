@@ -11,6 +11,7 @@ Created on Thu Oct 20 18:41:25 2016
 """
 ############ IMPORTS
 import pandas as pd
+import xarray as xr
 #import numpy as np
 #import matplotlib.pyplot as plt
 import os.path
@@ -22,7 +23,9 @@ import backtest as bt
 #cost = 0.000
 frequency = 12.0
 
-path=os.path.join('C:\Users','Richard','Dropbox','RJ & JVW','Backtest','csv dataset3')
+current_dir = os.path.dirname(__file__)
+print(current_dir)
+path=os.path.join(current_dir,'csv_dataset3')
 #fp_len = 48 # number of months to go back in fp - default is 8 years or 96 months
 inputs=[]
 for filenames in os.listdir(path):
@@ -36,12 +39,14 @@ inputs_to_shift=[item for item in inputs if item not in inputs_not_to_shift]
 ############ RUN CODE
 # create a data object 'd' using backtest.py
 d = bt.Data(path, inputs, inputs_to_shift, months_delay_data=3, start=0, delist_value=1)
-
+print(type(d))
 #data_present = d.accruals()*d.pfd()*d.pman()*d.market_cap()*d.mom()*d.mvi_weight()*d.value()*d.fip()
 #data_present = data_present.notnull().astype(int) # would be more reassuring if I had na's here..
 #data_present = data_present.replace(0,np.nan)
-
+print(d.basic_data['price_monthly'].index)
+print(d.basic_data['price_monthly'].columns)
 init_pos1 = pd.DataFrame(1, index=d.basic_data['price_monthly'].index, columns=d.basic_data['price_monthly'].columns)
+print(init_pos1)
 non_fin_sectors = list(pd.read_csv(os.path.join(path,'other data','non-fins.csv'))) #list(sectors.index[sectors==0])
 non_fin_sectors.remove('WES-JSE') # there's a woopsie in the price data for this stock, so I've just excluded it for now...
 init_pos_non_fins= init_pos1[non_fin_sectors]
@@ -63,42 +68,61 @@ def run_backtests():
     mc=bt.Mkt_cap_scr(threshold=1000)
     mw=bt.Mkt_cap_weights()
     
-    QM_object = bt.QM(threshold=1000, scr2_perc = 0.15, scr3_perc = 0.6, upper_limit=0.2)
-    QM_object.backtest(init_pos= init_pos1, data = d) #, rebalance = 'M', #Q-NOV, Q-DEC, Q-OCT                        
-    ret['QM'] = QM_object.calc_ret(price_data= d.basic_data['price_monthly'])
+    print("Creating QM object")
+    #QM_object = bt.QM(threshold=1000, scr2_perc = 0.15, scr3_perc = 0.6, upper_limit=0.2)
+    #QM_object.backtest(init_pos= init_pos1, data = d) #, rebalance = 'M', #Q-NOV, Q-DEC, Q-OCT                        
+    #ret['QM'] = QM_object.calc_ret(price_data= d.basic_data['price_monthly'])
     
-    QV_object = bt.QV(threshold=1000, scr2_perc=0.95, scr3_perc = 0.15, scr4_perc = 0.6, upper_limit=0.2)
-    QV_object.backtest(init_pos= init_pos1, data=d) #, rebalance = 'M'                                  
-    ret['QV'] = QV_object.calc_ret(price_data= d.basic_data['price_monthly'])
+    print("Creating QV object")
+    #QV_object = bt.QV(threshold=1000, scr2_perc=0.95, scr3_perc = 0.15, scr4_perc = 0.6, upper_limit=0.2)
+    #QV_object.backtest(init_pos= init_pos1, data=d) #, rebalance = 'M'                                  
+    #ret['QV'] = QV_object.calc_ret(price_data= d.basic_data['price_monthly'])
     
-    ret['QM+QV'] = (QM_object.calc_ret(price_data= d.basic_data['price_monthly']) + QV_object.calc_ret(price_data= d.basic_data['price_monthly'])  )/2.0
+    #ret['QM+QV'] = (QM_object.calc_ret(price_data= d.basic_data['price_monthly']) + QV_object.calc_ret(price_data= d.basic_data['price_monthly'])  )/2.0
  
-    QV_fin_object = bt.QV_fin(banks, insurers, threshold=0, scr2_perc = 0.15, scr3_perc = 0.6, upper_limit=0.2)
-    QV_fin_object.backtest(init_pos= init_pos_fin, data=d) #, rebalance = 'M',                                                             
-    ret['QV_fin'] = QV_fin_object.calc_ret(price_data= d.basic_data['price_monthly'])
     
+    #QV_fin_object = bt.QV_fin(banks, insurers, threshold=0, scr2_perc = 0.15, scr3_perc = 0.6, upper_limit=0.2)
+    #QV_fin_object.backtest(init_pos= init_pos_fin, data=d) #, rebalance = 'M',                                                             
+    #ret['QV_fin'] = QV_fin_object.calc_ret(price_data= d.basic_data['price_monthly'])
+    
+    print("Creating BAH object")
     BAH_object = bt.BAH()
     BAH_object.backtest(mc.run(init_pos1,data=d), data=d)
     ret['alsi'] = BAH_object.calc_ret(d.basic_data['price_monthly'])  
 
+    print("Creating mom object")
     mom_object = bt.Mom(scr_perc = 0.15)
     mom_object.run(mc.run(init_pos1,data=d), data=d)
     ret['mom'] = mom_object.calc_ret(d.basic_data['price_monthly'])  
+
+    print("Creating value object")
+    val_object = bt.Value(scr_perc = 0.15)
+    val_object.run(mc.run(init_pos1,data=d), data=d)
+    ret['value'] = val_object.calc_ret(d.basic_data['price_monthly']) 
     
+    print("Creating fip object")
     fip_object = bt.Fip(scr_perc = 0.6)
     fip_object.run(mc.run(init_pos1,data=d), data=d)
     ret['fip'] = fip_object.calc_ret(d.basic_data['price_monthly'])
     
-    acc_object = bt.Fip(scr_perc = 0.95)
-    acc_object.run(mc.run(init_pos1,data=d), data=d)
-    ret['acc'] = acc_object.calc_ret(d.basic_data['price_monthly'])
-    metrics=(['acc'])
-    metrics=(['QV', 'QV_fin','mom','fip','QM','alsi']) #
-                                
+    print("Creating acc object")
+    #acc_object = bt.Fip(scr_perc = 0.95)
+    #acc_object.run(mc.run(init_pos1,data=d), data=d)
+    #ret['acc'] = acc_object.calc_ret(d.basic_data['price_monthly'])
+    
+    #metrics=(['acc'])
+    metrics=(['alsi','mom', 'value','fip']) #'QV', 'QV_fin',,'QM','alsi'
+
+    print(" about to plot things")  
+
     bt.plot_returns(ret, metrics)    
     bt.tabulate_results(ret, metrics, frequency=12.0, risk_free = 0.07) # risk free rate is per annum
     bt.plot_CAGR(ret, metrics, 1)
     bt.plot_CAGR(ret, metrics, 5)
+
+print("About to run_backtests()")
+run_backtests()
+print("All done")
 
 def QM_mkt_cap(init_pos = init_pos1, threshold = 1000, scr_perc_mom = 0.2, scr_perc_fip = 0.6):  
     mc=bt.Mkt_cap_scr(threshold = threshold)
@@ -160,7 +184,7 @@ def QV_parts():
     #QV_fin_object.backtest(init_pos= init_pos_fin, data=d) #, rebalance = 'M',                                                             
     #ret['QV_fin'] = QV_fin_object.calc_ret(price_data= d.basic_data['price_monthly'])
     
-    BAH_object = bt.BAH()
+    BAH_object = bt.BAH() #buy and hold
     mw.run(BAH_object.backtest(mc.run(init_pos_non_fins,data=d), data=d), data=d)
     mw.final_positions = bt.limit_pos_size(mw.final_positions)
     ret['alsi'] = mw.calc_ret(d.basic_data['price_monthly'])  
@@ -339,8 +363,8 @@ def random_test():
     #random_CAGR = test.mean()
     value_CAGR = ((np.prod(1.+ret['value']))**(frequency/len(ret['value'])))-1
     idx = test  < value_CAGR # how many of the random results are less than our value result (CAGR)
-    print "Percentage of random outcomes that are less than our outcome:"
-    print "{:.2%}".format(idx.sum()/runs) # what percentage of the random results does our value result outperform?
+    print ("Percentage of random outcomes that are less than our outcome:")
+    print ("{:.2%}".format(idx.sum()/runs)) # what percentage of the random results does our value result outperform?
     # need to calculate what % of the random_CAGR's my value_CAGR beats
     metrics=range(10)
     
@@ -430,13 +454,13 @@ random_df = np.random.rand(runs,init_pos_non_fins.shape[0],init_pos_non_fins.sha
 ### do the market cap screen:
 mc=bt.Mkt_cap_scr(threshold=1000)
 mc.run(init_pos_non_fins,data=d) 
-random_df = np.multiply(random_df,mc.final_positions[init_pos_non_fins.columns].as_matrix()[np.newaxis]) #random_df = random_df*mc.final_positions
+random_df = np.multiply(random_df,mc.final_positions[init_pos_non_fins.columns].values[np.newaxis]) #random_df = random_df*mc.final_positions
 #random_df = random_df.replace(0,np.nan)
 perc=np.nanpercentile(random_df,80,axis=2,keepdims=True)
 screen=np.where(random_df>perc,1,0)
 
 #### do the weighting:
-weighting_data = d.basic_data['market_val'][init_pos_non_fins.columns].as_matrix()
+weighting_data = d.basic_data['market_val'][init_pos_non_fins.columns].values
 weighting_data = (screen*weighting_data)
 weights=np.transpose(np.transpose(weighting_data,(0,2,1))/weighting_data.sum(axis=2)[:,np.newaxis],(0,2,1))
 
@@ -451,18 +475,26 @@ while new_weights.sum() < 0.9*float(new_weights.shape[0]*new_weights.shape[1]): 
         new_weights = np.transpose((np.transpose(new_weights,(0,2,1))/row_sum[:,np.newaxis]),(0,2,1))
         new_weights = new_weights.clip(max=0.2)
 
+"""
 ### calc returns:
 start_date = '2000-01-30'
 prices = d.basic_data['price_monthly'] 
-wp = pd.Panel(new_weights, major_axis=init_pos_non_fins.index, minor_axis=init_pos_non_fins.columns)
-pnl = wp.shift(1).mul((prices-prices.shift(1))/prices.shift(1)) # calculate pnl as position yesterday x price change since yesterday
+print(new_weights)
+print(init_pos_non_fins.index)
+print(init_pos_non_fins.columns)
+wp = xr.DataArray(new_weights, major_axis=init_pos_non_fins.index, minor_axis=init_pos_non_fins.columns)
+#wp = pd.Panel(new_weights, major_axis=init_pos_non_fins.index, minor_axis=init_pos_non_fins.columns)
+pnl = xr.shift(1).mul((prices-prices.shift(1))/prices.shift(1)) # calculate pnl as position yesterday x price change since yesterday
+#pnl = wp.shift(1).mul((prices-prices.shift(1))/prices.shift(1)) # calculate pnl as position yesterday x price change since yesterday
 pnl=pnl.fillna(0)
 #pnl[positions.shift(1).fillna(0)!=positions.shift(2).fillna(0)]-= cost  #subtract transaction costs:
 total_pnl=pnl.sum(axis=2) # sum across all tickers to get total pnl per day
-total_positions=wp.sum(axis=2) # sum across tickers to get total number of positions
+total_positions=xr.sum(axis=2) # sum across tickers to get total number of positions
+#total_positions=wp.sum(axis=2) # sum across tickers to get total number of positions
 ret=total_pnl.mul(1/total_positions.shift(1)) # divide pnl by total weight of position in market to get return
 ret[ret==-np.inf]=0 # zero out the infs - a problem creeps in because of 27/4/05??
 ret=ret.fillna(0).ix[start_date:]
+"""
 
 value_object = bt.Value(scr_perc = 0.2)
 mw = bt.Mvi_weights()
@@ -471,7 +503,7 @@ mw1=mw.final_positions[mw.final_positions>0].count(axis=1)
 mw.final_positions = bt.limit_pos_size(mw.final_positions)
 value = mw.calc_ret(d.basic_data['price_monthly'])
 #port_size1 = mw.final_positions[mw.final_positions>0].count(axis=1)
-
+print("Created first value object...")
 #mom_object = bt.Mom(scr_perc = 0.2)
 #mw = bt.Mkt_cap_weights()
 #mw.run(mom_object.run(mc.run(init_pos1,data=d), data=d), data=d)   
@@ -480,10 +512,12 @@ value = mw.calc_ret(d.basic_data['price_monthly'])
 #port_size2 = mw.final_positions[mw.final_positions>0].count(axis=1)
 
 import matplotlib.pyplot as plt
-plt.plot(100*np.cumprod(1.+ret))
+#plt.plot(100*np.cumprod(1.+ret))
 plt.plot(100*np.cumprod(1.+value),lw=2)
+print("Created first plot...")
 #plt.plot(100*np.cumprod(1.+mom),lw=2)
 plt.show()
+print("Showing first plot...")
 
 #plt.plot(mc.final_positions[mc.final_positions>0].count(axis=1))
 #plt.plot(mom_object.final_positions[mom_object.final_positions>0].count(axis=1))
@@ -501,7 +535,8 @@ def plot_size (scr_perc, mid_object=value_object):
     plt.show()
     
 test=init_pos_non_fins*d.basic_data['market_val']
-test2=init_pos_non_fins*d.basic_data['price_monthly']    
+test2=init_pos_non_fins*d.basic_data['price_monthly']
+print("Created second test...")   
 #plt.plot(test[test>0].count(axis=1), label='mc_data')
 #plt.plot(test2[test2>0].count(axis=1), label='price')
 plt.show()
@@ -523,5 +558,6 @@ for i in range(1000,len(test)):
 daily_returns = bt.calc_ret(test,d.daily_price)
 import matplotlib.pyplot as plt
 plt.plot(100*np.cumprod(1.+daily_returns))
-plt.show()    
+plt.show()
+print ("All done!")
     
